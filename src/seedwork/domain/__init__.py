@@ -10,5 +10,5 @@ from .exceptions import (
 from .domain_service import DomainService
 from .factory import Factory
 from .specification import Specification
-from .identity_generator import IdentityGenerator
+from .identity_generator import IIdentityGenerator
 from .dmain_policy import DomainPolicy
