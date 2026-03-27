@@ -1,7 +1,13 @@
 class DomainException(Exception):
-    """ドメイン層で発生する例外の基底クラス"""
+    """ドメイン層で発生するあらゆる例外の基底クラス"""
     pass
 
-class ValidationError(DomainException):
-    """バリデーション失敗時の例外"""
-    pass
+class ValueObjectValidationError(DomainException):
+    """
+    値オブジェクトのバリデーションに失敗した際の例外。
+    どのクラスで、どんな値が、なぜダメだったのかを保持できる。
+    """
+    def __init__(self, message: str, class_name: str = None):
+        self.message = message
+        self.class_name = class_name
+        super().__init__(f"[{class_name}] {message}" if class_name else message)
