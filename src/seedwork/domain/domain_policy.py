@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, Any
 
 T = TypeVar("T")
