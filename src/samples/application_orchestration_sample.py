@@ -114,9 +114,13 @@ class MockUnitOfWork(IUnitOfWork):
     def commit(self): print("[UoW] コミット（確定）しました")
     def rollback(self): print("[UoW] ロールバック（破棄）しました")
 
+
 class MockIdentityContext(IIdentityContext):
     def __init__(self, user_id: str):
-        self._user = Identity(id=user_id, name="test_user",roles=["user"])
+        # ロール名を "user" に修正して判定をパスするようにします
+        roles = ["user"] if user_id else []
+        self._user = Identity(id=user_id, name="test_user", roles=roles)
+
     @property
     def current_identity(self) -> Identity:
         return self._user
