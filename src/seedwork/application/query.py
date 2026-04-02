@@ -1,20 +1,17 @@
+from typing import TypeVar, Generic
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar
-from .dto import DTO
 
-T_Result = TypeVar("T_Result")
-
-class Query(DTO):
-    """
-    読み取り専用の意図を表す基底クラス。
-    副作用（データの更新）を持たない操作に使用します。
-    """
+# 1. 基底となるクラスを定義
+class Query(ABC):
     pass
 
-class IQueryHandler(ABC, Generic[Query, T_Result]):
-    """
-    クエリを処理するハンドラのインターフェース。
-    """
+# 2. TypeVar（型変数）を定義
+# T_Query は Query クラス（またはそのサブクラス）であることを制約(bound)とする
+T_Query = TypeVar('T_Query', bound=Query)
+T_Result = TypeVar('T_Result')
+
+# 3. Generic に型変数を渡す
+class IQueryHandler(Generic[T_Query, T_Result], ABC):
     @abstractmethod
-    def handle(self, query: Query) -> T_Result:
+    def handle(self, query: T_Query) -> T_Result:
         pass
