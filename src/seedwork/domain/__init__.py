@@ -13,4 +13,8 @@ from .specification import Specification
 from .identity_generator import IIdentityGenerator
 from .domain_policy import DomainPolicy
 from .domain_event import DomainEvent
-from .event_publisher import DomainEventPublisher
+from .event_publisher import (
+    DomainEventPublisher,
+    DomainEventSubscriber,
+    publisher
+)
