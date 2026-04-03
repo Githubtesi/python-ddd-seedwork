@@ -1,39 +1,41 @@
 from abc import ABC, abstractmethod
-from typing import TypeVar, Any, Type
-
-T = TypeVar('T')
+from typing import Any, Dict, Type, TypeVar
+from .messaging import Command, Query, IUseCase, IQueryHandler
+from .results import Result
 
 class ICommandBus(ABC):
-    """コマンド（書き込み系）の配送を抽象化します。"""
     @abstractmethod
-    def send(self, command: Any) -> Any:
+    def dispatch(self, command: Any) -> Result:
         pass
 
 class IQueryBus(ABC):
-    """クエリ（読み取り系）の配送を抽象化します。"""
     @abstractmethod
     def ask(self, query: Any) -> Any:
         pass
 
 class InMemoryBus(ICommandBus, IQueryBus):
     """
-    メモリ上での簡易配送実装。
-    実稼働初期やテスト、小規模なモノリス構成で使用されます。
+    同一プロセス内でメッセージをルーティングするバス。
+    コマンドには execute()、クエリには handle() を呼び分ける。
     """
     def __init__(self):
-        self._handlers = {}
+        self._command_handlers: Dict[Type, IUseCase] = {}
+        self._query_handlers: Dict[Type, IQueryHandler] = {}
 
-    def register(self, message_type: Type, handler: Any):
-        self._handlers[message_type] = handler
+    def register_command_handler(self, command_type: Type, handler: IUseCase):
+        self._command_handlers[command_type] = handler
 
-    def send(self, command: Any) -> Any:
-        handler = self._handlers.get(type(command))
+    def register_query_handler(self, query_type: Type, handler: IQueryHandler):
+        self._query_handlers[query_type] = handler
+
+    def dispatch(self, command: Any) -> Result:
+        handler = self._command_handlers.get(type(command))
         if not handler:
-            raise Exception(f"No handler registered for {type(command)}")
-        return handler.handle(command)
+            raise Exception(f"No command handler registered for {type(command)}")
+        return handler.execute(command)
 
     def ask(self, query: Any) -> Any:
-        handler = self._handlers.get(type(query))
+        handler = self._query_handlers.get(type(query))
         if not handler:
-            raise Exception(f"No handler registered for {type(query)}")
+            raise Exception(f"No query handler registered for {type(query)}")
         return handler.handle(query)
