@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Generic
 
 from .entity import Entity, ID
@@ -8,7 +8,7 @@ from .entity import Entity, ID
 class VersionedEntity(Entity[ID], Generic[ID]):
     """楽観的ロック用のVersionを持つEntity。"""
 
-    version: int = 1
+    version: int = field(default=1, kw_only=True)
 
     def __post_init__(self) -> None:
         if self.version < 1:
