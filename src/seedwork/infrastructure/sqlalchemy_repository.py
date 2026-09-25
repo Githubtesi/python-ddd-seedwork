@@ -2,7 +2,8 @@ from abc import abstractmethod
 from typing import Any, Generic, List, Optional, Type, TypeVar
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.orm import Session
 
 from ..domain.entity import Entity
