@@ -1,5 +1,6 @@
 import pytest
-from sqlalchemy import Integer, String, select
+from sqlalchemy import String
+
 from sqlalchemy.orm import Mapped, mapped_column
 
 from seedwork.infrastructure.database_setup import Base, Database
@@ -11,6 +12,13 @@ class UserModel(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(100))
+
+
+class OrderModel(Base):
+    __tablename__ = "test_orders_uow"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    description: Mapped[str] = mapped_column(String(100))
 
 
 @pytest.fixture
@@ -28,6 +36,32 @@ def test_successful_context_commits(database):
 
     with database.session() as session:
         assert session.get(UserModel, "1").name == "Alice"
+
+
+def test_transaction_boundary_commits_multiple_changes(database):
+    uow = SQLAlchemyUnitOfWork(database.session_factory)
+
+    with uow:
+        uow.session.add(UserModel(id="1", name="Alice"))
+        uow.session.add(OrderModel(id="1", description="Order 1"))
+
+    with database.session() as session:
+        assert session.get(UserModel, "1") is not None
+        assert session.get(OrderModel, "1") is not None
+
+
+def test_transaction_boundary_rolls_back_all_changes(database):
+    uow = SQLAlchemyUnitOfWork(database.session_factory)
+
+    with pytest.raises(RuntimeError):
+        with uow:
+            uow.session.add(UserModel(id="1", name="Alice"))
+            uow.session.add(OrderModel(id="1", description="Order 1"))
+            raise RuntimeError("rollback all")
+
+    with database.session() as session:
+        assert session.get(UserModel, "1") is None
+        assert session.get(OrderModel, "1") is None
 
 
 def test_exception_context_rolls_back(database):
