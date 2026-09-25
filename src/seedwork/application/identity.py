@@ -1,13 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Type, Dict, Any, TypeVar, List
-from .command import Command, IUseCase
-from .query import Query, IQueryHandler
-from .result import Result
-
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 from typing import List
+
 
 @dataclass(frozen=True)
 class Identity:
@@ -27,12 +21,14 @@ class Identity:
         """特定のロールを持っているか確認"""
         return role in self.roles
 
+
 class IIdentityContext(ABC):
     """
     現在の実行コンテキストにおける Identity を取得するためのインターフェース。
     """
+
     @property
     @abstractmethod
     def current_identity(self) -> Identity:
-        """プロパティとして実装することで、context.current_identity でアクセス可能にする"""
+        """現在の Identity を取得する。"""
         pass
