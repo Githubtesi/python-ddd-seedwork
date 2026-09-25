@@ -6,9 +6,8 @@ from .app_exception import (
     AppException,
     ValidationError,
     AuthorizationError,
-    ResourceNotFoundError
+    ResourceNotFoundError,
 )
 from .identity import Identity, IIdentityContext
 from .query import Query, IQueryHandler
 from .bus import InMemoryBus
-from .result import Result
