@@ -3,12 +3,12 @@ from dataclasses import dataclass
 from seedwork.domain.entity import Entity
 
 
-@dataclass
+@dataclass(eq=False)
 class User(Entity[str]):
     name: str = ""
 
 
-@dataclass
+@dataclass(eq=False)
 class Product(Entity[str]):
     name: str = ""
 
