@@ -47,6 +47,26 @@ Domain / Application の抽象
 
 ---
 
+## 3. Entity / dataclassの実装ルール
+
+Domain Entityは、属性値ではなく識別子（ID）によって同一性を判定する。`Entity` 基底クラスの `__eq__` / `__hash__` を維持するため、Entityをdataclassとして実装する場合は必ず `@dataclass(eq=False)` を指定する。
+
+```python
+@dataclass(eq=False)
+class User(Entity[str]):
+    name: str = ""
+```
+
+`@dataclass` のデフォルト（`eq=True`）を使用すると、サブクラス側で属性値による `__eq__` が生成され、基底クラスのIDベースの同一性判定が上書きされる。また、可変dataclassでは `__hash__` が無効化される場合がある。これはEntityの設計意図と矛盾するため禁止する。
+
+基本ルール:
+- [ ] Entityのdataclassは `eq=False`
+- [ ] Entityの同一性はIDで判定する
+- [ ] EntityのハッシュはIDを基準とする
+- [ ] `name` 等の状態属性だけで同一性を判定しない
+
+詳細なDomain実装ルールは `DOMAIN_RULE.md` に従う。
+
 ## 3. レイヤー構成
 
 ### 3.1 Domain
