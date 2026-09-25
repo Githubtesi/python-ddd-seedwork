@@ -145,6 +145,84 @@ Presentationに業務ルールを実装してはいけない。
 
 ---
 
+## 3.1 Version管理のアーキテクチャルール
+
+Version管理は、**すべてのAggregateへ一律に適用しない**。同時更新による重要な変更の消失を検出する必要があるAggregateに限定して採用する。判断基準は更新頻度ではなく、**同時更新時の競合を検出する必要性**とする。
+
+### Version管理を適用する判断基準
+
+以下を確認する。
+
+1. 複数の利用者・プロセスが同じAggregateを並行して更新する可能性があるか。
+2. 古い状態による更新が、新しい重要な変更を意図せず上書きする可能性があるか。
+3. 競合を検出した場合に、Use Caseとして失敗・再取得・再確認等の扱いが必要か。
+4. Unique Constraint、Idempotency、Pessimistic Lock等の別方式だけで十分に保証できないか。
+
+典型的に検討対象となるAggregateは Order、Account、Inventory、Reservation、Payment などだが、機能名だけで機械的に決めず、実際の同時更新シナリオに基づいて判断する。
+
+読み取り専用、同時更新による上書きが問題にならない、更新主体が一意に制御されている、または別の競合制御で要件を満たせる場合は、Version管理を追加しない選択ができる。
+
+### Version管理の責務分担
+
+| 判断・責務 | Domain | Application | Infrastructure |
+|---|---|---|---|
+| Version管理が必要かの業務上判断 | ○ | 補助 | × |
+| Versionを持つEntity / Aggregateのモデル化 | ○ | × | × |
+| Transaction境界の調整 | × | ○ | 実装 |
+| Version条件付きUPDATE等の具体実装 | × | 抽象を利用 | ○ |
+| ORMのVersion機構 | × | × | ○ |
+| Concurrency Conflictの技術的検出 | × | × | ○ |
+| ConflictをUse Case上でどう扱うか | × | ○ | 技術例外を抽象化して提供 |
+
+DomainはSQLAlchemy、SQL、Session、version_id_col等の具体技術を参照してはいけない。
+
+### Version管理の実装ルール
+
+- Version管理が必要なEntity / Aggregateは VersionedEntity または VersionedAggregateRoot を利用する。
+- dataclassは必ず @dataclass(eq=False) とする。
+- Versionの初期値は 1 とする。
+- version はEntityのIDとは別のConcurrency管理値である。
+- Entityの同一性・hashはIDを基準とし、Versionを含めない。
+- increment_version() はDomain上で明示的にVersionを進める必要がある場合に限定する。
+- 通常の永続化におけるVersion更新はInfrastructure / ORM側で管理する。
+- DomainからSQLAlchemy等のORMやDB固有APIを呼び出してはいけない。
+
+Infrastructureでは、Versioned ModelにSQLAlchemyの version_id_col を設定し、VersionedSQLAlchemyRepositoryを利用する。競合は ConcurrencyConflictError に変換して外部へ提供する。
+
+基本形:
+
+Domain Entity
+  ↓ Mapping
+Versioned SQLAlchemy Model
+  ↓
+UPDATE ... WHERE id = ? AND version = ?
+  ↓
+成功 → Version更新
+失敗 → Concurrency Conflict
+
+### VersionとTransactionの関係
+
+- Transactionはユースケースの原子性を保証する。
+- Versionは並行更新による競合を検出する。
+- Version管理はTransaction境界の代替ではない。
+- Conflict発生時はTransactionをRollbackしてUse Caseへエラーを返す。
+- 自動RetryはUse Caseの性質を確認した上で明示的に設計する。
+
+### Version管理レビュー・チェックリスト
+
+- [ ] Version管理が必要な理由を説明できる
+- [ ] 同時更新シナリオを具体的に説明できる
+- [ ] 不要と判断した場合、その理由を説明できる
+- [ ] VersionをEntityのIDと混同していない
+- [ ] VersionをEntityの同一性判定に使用していない
+- [ ] DomainがSQLAlchemy等へ依存していない
+- [ ] Version管理の具体実装がInfrastructureにある
+- [ ] Repositoryが競合を検出できる
+- [ ] ConcurrencyConflictErrorへ適切に変換される
+- [ ] TransactionとConcurrency Controlの責務が混同されていない
+- [ ] Conflict時のRollback / Retry方針が明確
+- [ ] 全Aggregateへ不要にVersion管理を適用していない
+
 ## 4. 依存方向
 
 ### 4.1 基本ルール
