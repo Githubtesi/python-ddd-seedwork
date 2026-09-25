@@ -18,3 +18,5 @@ from .event_publisher import (
     DomainEventSubscriber,
     publisher
 )
+from .versioned_entity import VersionedEntity
+from .versioned_aggregate_root import VersionedAggregateRoot
