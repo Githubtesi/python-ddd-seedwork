@@ -22,3 +22,10 @@ class MappingError(InfrastructureException):
 
     def __init__(self, message: str):
         super().__init__(message, code="MAPPING_ERROR")
+
+
+class ConcurrencyConflictError(InfrastructureException):
+    """楽観的ロック等で同時更新の競合が検出された際の例外。"""
+
+    def __init__(self, message: str = "同時更新の競合が検出されました"):
+        super().__init__(message, code="CONCURRENCY_CONFLICT")
