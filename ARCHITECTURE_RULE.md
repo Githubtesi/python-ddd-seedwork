@@ -458,6 +458,8 @@ Conflict:
 
 Version管理の具体的なSQLAlchemy実装はInfrastructureに置く。
 
+Optimistic Lockingを実装するRepositoryは、更新時に取得時のVersionを条件へ含め、更新件数が0件なら `ConcurrencyConflictError` へ変換する。Versionを利用するEntity / Modelでは、Versionの初期値とインクリメント規則を明確にする。
+
 ApplicationはConcurrency Conflictをユースケース上のエラーとして扱える抽象を利用する。
 
 競合発生時に自動Retryしてよいかは、Use Caseの性質を考慮して決定する。
