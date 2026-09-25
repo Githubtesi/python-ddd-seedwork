@@ -1,6 +1,9 @@
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm.exc import StaleDataError
+
+from .infrastructure_exceptions import ConcurrencyConflictError
 
 from ..application.unit_of_work import IUnitOfWork
 
@@ -40,6 +43,9 @@ class SQLAlchemyUnitOfWork(IUnitOfWork):
 
             try:
                 self.commit()
+            except StaleDataError as exc:
+                self.rollback()
+                raise ConcurrencyConflictError() from exc
             except Exception:
                 self.rollback()
                 raise
