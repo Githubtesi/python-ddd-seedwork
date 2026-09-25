@@ -301,6 +301,279 @@ Applicationは `with unit_of_work:` のように抽象を利用する。
 
 ---
 
+
+---
+
+## 14. Transaction / Concurrency
+
+トランザクションと同時実行制御は、**Applicationが境界を決め、Infrastructureが具体的な仕組みを実装する**。
+
+### 14.1 Transaction Boundary
+
+1つのユースケースで、どこまでを原子的に成功・失敗させるかをApplicationが決定する。
+
+基本形:
+
+Application Use Case
+    ↓
+IUnitOfWork
+    ↓
+Repository
+    ↓
+Infrastructure / Database
+
+ApplicationはDBのTransaction APIやSQLAlchemy Sessionを直接操作してはいけない。
+
+ApplicationはUnit of Workの抽象を利用し、実際のTransaction開始・Commit・RollbackはInfrastructureが担当する。
+
+### 14.2 Transaction Boundaryの原則
+
+- 原則として1つのUse Caseを1つのTransaction境界として扱う。
+- Transactionの開始・Commit・RollbackをDomainに置かない。
+- Domain Entity / Value ObjectからDB Transactionを操作しない。
+- Applicationは「何を1つの原子操作として扱うか」を決定する。
+- Infrastructureは「その原子操作をどのDB機構で実現するか」を決定する。
+- 外部API呼び出しやMessage Broker送信を、DB Transactionの単純な一部として扱わない。
+- 長時間Transactionを避け、Transaction内の処理を必要最小限にする。
+
+### 14.3 Commit / Rollback
+
+Applicationは正常終了時にCommitし、例外発生時にはRollbackされる構造を利用する。
+
+```text
+Use Case
+  ↓
+Begin Transaction
+  ↓
+Load Aggregate
+  ↓
+Domain Logic
+  ↓
+Persist Changes
+  ↓
+Commit
+```
+
+失敗時:
+
+```text
+Use Case
+  ↓
+Begin Transaction
+  ↓
+...
+  ↓
+Exception
+  ↓
+Rollback
+```
+
+Commit済みの処理をApplicationが再度取り消すことをRollbackと混同しない。
+
+### 14.4 TransactionとDomain Event
+
+Domain Eventの発生とDB更新の整合性を考慮する。
+
+基本方針:
+
+```text
+Domain
+  ↓
+Domain Eventを生成
+  ↓
+Application
+  ↓
+Transaction内でAggregate変更を保存
+  ↓
+Infrastructure
+  ↓
+必要に応じてOutboxへ保存
+  ↓
+Commit
+  ↓
+非同期配送
+```
+
+DB更新と外部Message Brokerへの直接送信を、同一Transactionとして保証できない場合はOutbox Patternを検討する。
+
+Domain EventそのものにMessage BrokerやDBの具体技術を持たせない。
+
+### 14.5 Concurrency Control
+
+同時実行制御は、データ競合による意図しない上書きを防ぐために行う。
+
+代表的な方式:
+
+- Optimistic Locking
+- Pessimistic Locking
+- DatabaseのUnique Constraint
+- DatabaseのForeign Key / Constraint
+- Idempotency
+
+原則として、**業務上の競合を検出するルール**と**DB上で競合を検出する技術**を分離する。
+
+### 14.6 Optimistic Locking
+
+通常はOptimistic Lockingを第一候補とする。
+
+AggregateにVersion等のConcurrency Tokenを持たせ、更新時に取得時のVersionと一致することを確認する。
+
+```text
+Read:
+  id = 100
+  version = 3
+
+Update:
+  UPDATE ...
+  WHERE id = 100
+    AND version = 3
+
+Success:
+  version = 4
+
+Conflict:
+  更新件数 = 0
+  → Concurrency Conflict
+```
+
+Version管理の具体的なSQLAlchemy実装はInfrastructureに置く。
+
+ApplicationはConcurrency Conflictをユースケース上のエラーとして扱える抽象を利用する。
+
+競合発生時に自動Retryしてよいかは、Use Caseの性質を考慮して決定する。
+
+### 14.7 Pessimistic Locking
+
+同時更新を許可せず、処理中は対象データをロックする必要がある場合はPessimistic Lockingを利用できる。
+
+例:
+
+```text
+SELECT ... FOR UPDATE
+```
+
+ただし、DomainやApplicationにSQL文やORM固有のLock APIを漏らしてはいけない。
+
+必要な場合はRepository等の抽象を通じてInfrastructureへ委譲する。
+
+### 14.8 Retry
+
+Concurrency Conflictや一時的なDBエラーに対するRetryは、無条件に実装してはいけない。
+
+Retryを検討する条件:
+
+- 操作が再実行可能である
+- 副作用が重複しない
+- Transactionを再開始できる
+- 最大Retry回数を設定できる
+- Backoff等を考慮できる
+
+特に外部API送信、メール送信、決済等の副作用を含むUse Caseでは、単純なRetryによる二重実行に注意する。
+
+### 14.9 Idempotency
+
+外部から同じCommandが複数回送信される可能性がある場合、必要に応じてIdempotencyを設計する。
+
+例:
+
+```text
+Command
+  + Idempotency Key
+        ↓
+Application
+        ↓
+Idempotency Check
+        ↓
+Use Case
+        ↓
+Transaction
+```
+
+Idempotency Keyの保存・一意制約などの具体実装はInfrastructureで行う。
+
+「Retryできる」ことと「Idempotentである」ことは同じではない。
+
+### 14.10 Database Constraint
+
+競合防止や不変条件の一部はDatabase Constraintでも保証する。
+
+例:
+
+- UNIQUE
+- PRIMARY KEY
+- FOREIGN KEY
+- CHECK
+
+ただし、Database Constraintだけに業務ルールを依存してはいけない。
+
+Domainが表現すべき業務ルールはDomainでも表現し、Database Constraintは永続化層での最終防衛線として利用する。
+
+### 14.11 Transactionと外部システム
+
+DB Transactionの中で、以下の外部処理を長時間実行しない。
+
+- HTTP API
+- 外部サービス
+- Message Broker
+- メール送信
+- ファイルアップロード
+
+必要な場合は以下を検討する。
+
+- Outbox Pattern
+- Inbox Pattern
+- Saga / Process Manager
+- 非同期Job
+
+ただし、導入は必要性が明確な場合に限定する。
+
+### 14.12 Transaction / Concurrencyの責務分担
+
+| 判断対象 | Domain | Application | Infrastructure |
+| :--- | :--- | :--- | :--- |
+| 業務上の不変条件 | ○ | × | × |
+| Transaction境界の決定 | × | ○ | 実装 |
+| Commit / Rollback | × | 抽象を利用 | ○ |
+| Unit of Work抽象 | 必要に応じて | ○ | 具体実装 |
+| Optimistic Lockの具体実装 | × | 抽象を利用 | ○ |
+| Pessimistic Lockの具体実装 | × | 抽象を利用 | ○ |
+| DB Constraint | × | × | ○ |
+| Retry方針 | × | ○ | 技術的Retry |
+| Idempotencyのユースケース方針 | × | ○ | 永続化実装 |
+| Outbox | × | 発行・調整 | ○ |
+
+### 14.13 AI実装時のConcurrency確認
+
+AIはTransactionやConcurrencyに関するコードを追加・変更する前に、以下を確認する。
+
+1. そのUse CaseのTransaction境界を確認する。
+2. 既存のUnit of Work抽象を確認する。
+3. Repositoryの取得・保存方法を確認する。
+4. Version / Concurrency Tokenの有無を確認する。
+5. 既存のRetry方針を確認する。
+6. Idempotencyが必要か確認する。
+7. Domain Event / Outboxとの整合性を確認する。
+8. DB Constraintとの責務重複を確認する。
+9. SQLAlchemy等の具体技術をDomain / Applicationへ漏らさない。
+10. 新しいTransaction管理方式を既存設計と矛盾した形で勝手に追加しない。
+
+### 14.14 Transaction / Concurrencyレビュー・チェックリスト
+
+- [ ] Use Case単位のTransaction境界が明確
+- [ ] Transactionの具体実装がInfrastructureにある
+- [ ] DomainがTransactionを操作していない
+- [ ] ApplicationがDB Session等を直接操作していない
+- [ ] Commit / Rollbackの責務が明確
+- [ ] 同時更新時の競合戦略が明確
+- [ ] Optimistic / Pessimistic Lockの選択理由が明確
+- [ ] Retryによる二重実行が発生しない
+- [ ] 必要なIdempotencyが設計されている
+- [ ] Database Constraintを適切に利用している
+- [ ] Domain EventとDB更新の整合性を確認している
+- [ ] 必要に応じてOutbox Patternを検討している
+- [ ] 外部API等を長時間Transactionに巻き込んでいない
+- [ ] SQLAlchemy等の技術詳細が内側へ漏れていない
+
 ## 14. Domain Eventの境界
 
 Domain Eventの「何が起きたか」はDomainが定義。
