@@ -81,6 +81,13 @@ def test_versioned_repository_requires_mapper_version_column(database):
         __tablename__ = "test_invalid_versioned"
         id: Mapped[str] = mapped_column(String(36), primary_key=True)
 
+    class InvalidRepository(VersionedSQLAlchemyRepository[Order, InvalidModel]):
+        def _to_domain(self, model: InvalidModel) -> Order:
+            return Order(id=model.id, total=0)
+
+        def _to_model(self, entity: Order) -> InvalidModel:
+            return InvalidModel(id=entity.id)
+
     with database.session() as session:
         with pytest.raises(ValueError):
-            VersionedSQLAlchemyRepository(session, InvalidModel)
+            InvalidRepository(session, InvalidModel)
